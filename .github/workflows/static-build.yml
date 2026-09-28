@@ -1,44 +1,26 @@
 name: Static build
 
 # Manually builds a static copy of the site (no Node server needed) and
-# optionally uploads it to static / shared hosting over FTP, FTPS or SFTP.
-#
-# Secrets used when deploying (Settings -> Secrets and variables -> Actions):
-#   DEPLOY_HOST      e.g. ftp.example.com
-#   DEPLOY_USERNAME
-#   DEPLOY_PASSWORD
-#   DEPLOY_PORT      optional; defaults to 21 (ftp/ftps) or 22 (sftp)
+# publishes it as a GitHub Release with a zip to upload to static / shared
+# hosting. Extract the zip into your web root; it includes an .htaccess.
 
 on:
   workflow_dispatch:
     inputs:
-      deploy:
-        description: Upload the build to your host
-        type: choice
-        options:
-          - none
-          - ftp
-          - ftps
-          - sftp
-        default: none
-      remote_dir:
-        description: Remote directory to upload into
+      tag:
+        description: Release tag (leave empty for static-YYYYMMDD-HHMM)
         type: string
-        default: public_html
-      delete_remote:
-        description: Delete remote files that are not in the build
-        type: boolean
-        default: false
+        default: ""
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: static-build
   cancel-in-progress: false
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -56,48 +38,24 @@ jobs:
       - name: Build static site
         run: npm run build:spa
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: static-site
-          path: out/
-          include-hidden-files: true
-          retention-days: 14
-
-      - name: Deploy
-        if: inputs.deploy != 'none'
+      - name: Zip build
+        id: zip
         env:
-          PROTOCOL: ${{ inputs.deploy }}
-          REMOTE_DIR: ${{ inputs.remote_dir }}
-          DELETE_REMOTE: ${{ inputs.delete_remote }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          LFTP_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          TAG: ${{ inputs.tag }}
         run: |
-          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USERNAME" ] || [ -z "$LFTP_PASSWORD" ]; then
-            echo "::error::Set the DEPLOY_HOST, DEPLOY_USERNAME and DEPLOY_PASSWORD secrets to deploy."
-            exit 1
-          fi
-          sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+          tag="${TAG:-static-$(date -u +%Y%m%d-%H%M)}"
+          file="screenshot-studio-$tag.zip"
+          (cd out && zip -r -q -9 "../$file" .)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
 
-          case "$PROTOCOL" in
-            sftp) scheme=sftp; port="${DEPLOY_PORT:-22}" ;;
-            ftps) scheme=ftp;  port="${DEPLOY_PORT:-21}" ;;
-            *)    scheme=ftp;  port="${DEPLOY_PORT:-21}" ;;
-          esac
-          [ "$PROTOCOL" = ftps ] && ssl=true || ssl=false
-          [ "$DELETE_REMOTE" = true ] && delete=--delete || delete=
-
-          lftp <<EOF
-          set cmd:fail-exit yes
-          set net:max-retries 3
-          set net:timeout 30
-          set ftp:ssl-force $ssl
-          set ftp:ssl-protect-data $ssl
-          set sftp:auto-confirm yes
-          open -u "$DEPLOY_USERNAME" --env-password -p $port $scheme://$DEPLOY_HOST
-          mkdir -p -f "$REMOTE_DIR"
-          mirror --reverse --verbose --parallel=8 $delete out/ "$REMOTE_DIR"
-          bye
-          EOF
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.zip.outputs.tag }}
+          FILE: ${{ steps.zip.outputs.file }}
+        run: |
+          gh release create "$TAG" "$FILE" \
+            --target "$GITHUB_SHA" \
+            --title "Static build $TAG" \
+            --notes "Static build of ${GITHUB_SHA::7} from \`$GITHUB_REF_NAME\`. Extract the zip into your web root (it includes an \`.htaccess\` for Apache)."

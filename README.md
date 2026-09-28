@@ -37,7 +37,7 @@ Open [localhost:3000](http://localhost:3000). The browser editor needs no runnin
 
 Features that need the API routes, such as website screenshots, tweet import and server-side export, are not available in the static copy.
 
-To build it from GitHub, run the **Static build** workflow from the Actions tab. It always attaches the build as a `static-site` artifact. To also upload it, choose `ftp`, `ftps` or `sftp` and set the `DEPLOY_HOST`, `DEPLOY_USERNAME`, `DEPLOY_PASSWORD` and optional `DEPLOY_PORT` repository secrets.
+To build it from GitHub, run the **Static build** workflow from the Actions tab. It publishes a GitHub Release with the site as a zip; extract it into your web root.
 
 ## Contribute
 
