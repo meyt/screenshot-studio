@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "npx prisma generate && next dev --webpack",
     "build": "npx prisma generate && next build --webpack",
+    "build:spa": "node scripts/build-spa.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "tsx --test tests/*.test.ts",

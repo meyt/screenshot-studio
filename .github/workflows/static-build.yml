@@ -1,0 +1,103 @@
+name: Static build
+
+# Manually builds a static copy of the site (no Node server needed) and
+# optionally uploads it to static / shared hosting over FTP, FTPS or SFTP.
+#
+# Secrets used when deploying (Settings -> Secrets and variables -> Actions):
+#   DEPLOY_HOST      e.g. ftp.example.com
+#   DEPLOY_USERNAME
+#   DEPLOY_PASSWORD
+#   DEPLOY_PORT      optional; defaults to 21 (ftp/ftps) or 22 (sftp)
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Upload the build to your host
+        type: choice
+        options:
+          - none
+          - ftp
+          - ftps
+          - sftp
+        default: none
+      remote_dir:
+        description: Remote directory to upload into
+        type: string
+        default: public_html
+      delete_remote:
+        description: Delete remote files that are not in the build
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: static-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build static site
+        run: npm run build:spa
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: static-site
+          path: out/
+          include-hidden-files: true
+          retention-days: 14
+
+      - name: Deploy
+        if: inputs.deploy != 'none'
+        env:
+          PROTOCOL: ${{ inputs.deploy }}
+          REMOTE_DIR: ${{ inputs.remote_dir }}
+          DELETE_REMOTE: ${{ inputs.delete_remote }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          LFTP_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USERNAME" ] || [ -z "$LFTP_PASSWORD" ]; then
+            echo "::error::Set the DEPLOY_HOST, DEPLOY_USERNAME and DEPLOY_PASSWORD secrets to deploy."
+            exit 1
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+          case "$PROTOCOL" in
+            sftp) scheme=sftp; port="${DEPLOY_PORT:-22}" ;;
+            ftps) scheme=ftp;  port="${DEPLOY_PORT:-21}" ;;
+            *)    scheme=ftp;  port="${DEPLOY_PORT:-21}" ;;
+          esac
+          [ "$PROTOCOL" = ftps ] && ssl=true || ssl=false
+          [ "$DELETE_REMOTE" = true ] && delete=--delete || delete=
+
+          lftp <<EOF
+          set cmd:fail-exit yes
+          set net:max-retries 3
+          set net:timeout 30
+          set ftp:ssl-force $ssl
+          set ftp:ssl-protect-data $ssl
+          set sftp:auto-confirm yes
+          open -u "$DEPLOY_USERNAME" --env-password -p $port $scheme://$DEPLOY_HOST
+          mkdir -p -f "$REMOTE_DIR"
+          mirror --reverse --verbose --parallel=8 $delete out/ "$REMOTE_DIR"
+          bye
+          EOF

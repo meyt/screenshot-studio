@@ -98,6 +98,8 @@ export function getR2ImageUrl(options: {
 /** Same-origin image URL resized by the Next.js image optimizer; width must be a configured image size. */
 export function getResizedImageUrl(url: string, width: number): string {
   if (!url.startsWith('/') || url.startsWith('//')) return url;
+  // Static export has no image optimizer; serve the original file.
+  if (process.env.NEXT_PUBLIC_STATIC_EXPORT === '1') return url;
   return `/_next/image?url=${encodeURIComponent(url)}&w=${width}&q=75`;
 }
 

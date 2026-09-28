@@ -5,6 +5,8 @@ import { CLAIMS_CHECKED, getAllComparisonSlugs } from "@/lib/seo/comparisons";
 import { getGuide, guideUpdated, guides } from "@/lib/seo/guides";
 import { TOOLS, TOOLS_HUB_PATH } from "@/lib/seo/tools";
 
+export const dynamic = "force-static";
+
 const STATIC_PATHS = [
   "/",
   "/editor",
