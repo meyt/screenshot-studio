@@ -1,0 +1,61 @@
+name: Static build
+
+# Manually builds a static copy of the site (no Node server needed) and
+# publishes it as a GitHub Release with a zip to upload to static / shared
+# hosting. Extract the zip into your web root; it includes an .htaccess.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (leave empty for static-YYYYMMDD-HHMM)
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: static-build
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build static site
+        run: npm run build:spa
+
+      - name: Zip build
+        id: zip
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          tag="${TAG:-static-$(date -u +%Y%m%d-%H%M)}"
+          file="screenshot-studio-$tag.zip"
+          (cd out && zip -r -q -9 "../$file" .)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.zip.outputs.tag }}
+          FILE: ${{ steps.zip.outputs.file }}
+        run: |
+          gh release create "$TAG" "$FILE" \
+            --target "$GITHUB_SHA" \
+            --title "Static build $TAG" \
+            --notes "Static build of ${GITHUB_SHA::7} from \`$GITHUB_REF_NAME\`. Extract the zip into your web root (it includes an \`.htaccess\` for Apache)."

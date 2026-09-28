@@ -1,12 +1,25 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
+// Static SPA build for plain static / shared hosting (see scripts/build-spa.mjs).
+// Headers, redirects and rewrites need a Node server, so the export build
+// drops them and scripts/build-spa.mjs writes .htaccess equivalents instead.
+const isStaticExport = process.env.STATIC_EXPORT === "1";
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
 
+  ...(isStaticExport && {
+    output: "export",
+    trailingSlash: true,
+    env: { NEXT_PUBLIC_STATIC_EXPORT: "1" },
+  }),
+
   images: {
+    unoptimized: isStaticExport,
     remotePatterns: [
       {
         // R2 custom domain (new)
@@ -150,6 +163,13 @@ const nextConfig: NextConfig = {
   // REQUIRED for react-konva
   webpack: (config, { isServer }) => {
     config.externals = [...(config.externals || []), { canvas: "canvas" }];
+    if (isStaticExport) {
+      // No request at build time: cookies()/headers() read as empty.
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        "next/headers$": path.resolve(process.cwd(), "lib/static-export/next-headers.ts"),
+      };
+    }
     if (!isServer) {
       // transformers.js (background remover) references Node-only backends
       // that must never be bundled for the browser. Server code still uses sharp.
@@ -166,5 +186,11 @@ const nextConfig: NextConfig = {
   turbopack: {},
 
 };
+
+if (isStaticExport) {
+  delete nextConfig.headers;
+  delete nextConfig.redirects;
+  delete nextConfig.rewrites;
+}
 
 export default withNextIntl(nextConfig);

@@ -31,6 +31,14 @@ npm run dev
 
 Open [localhost:3000](http://localhost:3000). The browser editor needs no running database; `DATABASE_URL` is required by Prisma during startup and builds. Server-side screenshot caching requires PostgreSQL and R2 credentials; see the [cache configuration](./lib/screenshot-cache.ts).
 
+## Static build (shared hosting)
+
+`npm run build:spa` writes a fully static copy of the site to `out/`, with an `.htaccess` (Apache) and `_headers` (Netlify/Cloudflare Pages) carrying the redirects and the cross-origin isolation headers the editor needs. Upload the contents of `out/` to your web root.
+
+Features that need the API routes, such as website screenshots, tweet import and server-side export, are not available in the static copy.
+
+To build it from GitHub, run the **Static build** workflow from the Actions tab. It publishes a GitHub Release with the site as a zip; extract it into your web root.
+
 ## Contribute
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow and checks. Built with Next.js, React, TypeScript, Tailwind CSS, and Zustand.

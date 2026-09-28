@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /out/
+/.spa-stash/
 
 # production
 /build
@@ -43,6 +44,7 @@ next-env.d.ts
 public/backgrounds
 /scripts/*
 !/scripts/indexnow.ts
+!/scripts/build-spa.mjs
 
 prisma/migrations
 /lib/generated/prisma
